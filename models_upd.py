@@ -200,7 +200,7 @@ class DeepCoral(nn.Module):
     def __init__(self, num_classes=2):
         super(DeepCoral, self).__init__()
         self.sharedNet = resnet50(settings.use_checkpoint)
-        self.cls_fc = nn.Linear(2048, num_classes)
+        # self.cls_fc = nn.Linear(2048, num_classes)
 
     def forward(self, source, target):
         source, target, coral_loss = self.sharedNet(source, target)
