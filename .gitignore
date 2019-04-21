@@ -1,0 +1,9 @@
+.idea
+checkpoint.tar
+.vscode
+.ipynb_checkpoints
+*.ipynb
+__pycache__
+*.pyc
+.*
+!.gitignore
