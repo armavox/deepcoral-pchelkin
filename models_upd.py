@@ -1,3 +1,4 @@
+import torch
 import torch.nn as nn
 import math
 import torch.utils.model_zoo as model_zoo
@@ -143,8 +144,6 @@ class ResNet(nn.Module):
             if target is not None:
                 target = self.resize(target)
 
-        coral_loss = []
-
         source = self.conv1(source)
         if target is not None:
             target = self.conv1(target)
@@ -156,7 +155,7 @@ class ResNet(nn.Module):
         source = self.relu(source)
         if target is not None:
             target = self.relu(target)
-            coral_loss.append(CORAL(source, target))
+            coral_loss = CORAL(source, target)
 
         source = self.maxpool(source)
         if target is not None:
@@ -165,22 +164,22 @@ class ResNet(nn.Module):
         source = self.layer1(source)
         if target is not None:
             target = self.layer1(target)
-            coral_loss.append(CORAL(source, target))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer2(source)
         if target is not None:
             target = self.layer2(target)
-            coral_loss.append(CORAL(source, target))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer3(source)
         if target is not None:
             target = self.layer3(target)
-            coral_loss.append(CORAL(source, target))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer4(source)
         if target is not None:
             target = self.layer4(target)
-            coral_loss.append(CORAL(source, target))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.avgpool(source)
         if target is not None:
@@ -189,7 +188,7 @@ class ResNet(nn.Module):
         source = source.view(source.size(0), -1)
         if target is not None:
             target = target.view(target.size(0), -1)
-            coral_loss.append(CORAL(source, target))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         if resNet_main == True:
             source = self.classifier(source)

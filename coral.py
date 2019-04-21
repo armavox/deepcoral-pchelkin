@@ -15,7 +15,7 @@ def CORAL(source, target):
 
     loss = torch.norm((source_cov - target_cov), dim=(-2,-1))
     loss = loss/(4*d**2)
-    loss = torch.mean(loss)
+    loss = torch.mean(loss).unsqueeze(-1)
     return loss
 
     # xm = torch.mean(source, 1, keepdim=True) - source

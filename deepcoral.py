@@ -9,7 +9,6 @@ import math
 import data_loader
 import models_upd as models
 from torch.utils import model_zoo
-os.environ["CUDA_VISIBLE_DEVICES"] = "0"
 import matplotlib.pyplot as plt
 import utils
 import numpy as np
@@ -57,7 +56,8 @@ learning rate{: .6f}""".format(epoch, settings.epochs, LEARNING_RATE) )
         label_source_pred, loss_coral = model(data_source, data_target)
         loss_cls = F.nll_loss(F.log_softmax(label_source_pred, dim=1), label_source)
         gamma = 2  / (1 + math.exp(-10 * (epoch) / settings.epochs)) - 1
-        loss_coral = torch.mean(torch.tensor(loss_coral))
+
+        loss_coral = torch.mean(loss_coral)
         loss = loss_cls + gamma * loss_coral
         loss.backward()
         optimizer.step()
