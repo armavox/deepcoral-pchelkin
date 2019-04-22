@@ -177,23 +177,28 @@ class ResNet(nn.Module):
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer4(source)
+        print('layer4', source.size())
         if target is not None:
             target = self.layer4(target)
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.avgpool(source)
+        
         if target is not None:
             target = self.avgpool(target)
 
         source = source.view(source.size(0), -1)
+        print('LAYER2', source.size())
         if target is not None:
             target = target.view(target.size(0), -1)
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         if resNet_main == True:
             source = self.classifier(source)
+            print('LAYERclass', source.size())
 
         return source, target, coral_loss
+
 
 class DeepCoral(nn.Module):
     def __init__(self, num_classes=2):

@@ -7,7 +7,6 @@ from torch.autograd import Variable
 import os
 import math
 import data_loader
-import models_upd as models
 from torch.utils import model_zoo
 import matplotlib.pyplot as plt
 import utils
@@ -51,8 +50,8 @@ learning rate{: .6f}""".format(epoch, settings.epochs, LEARNING_RATE) )
         data_target, label_target = iter_target.next()
         if i % data_loader.len_target_loader == 0:
             iter_target = iter(data_loader.target_train_loader)
-        data_source, label_source = Variable(data_source).to(device), Variable(label_source).to(device)
-        data_target, label_target = Variable(data_target).to(device), Variable(label_target).to(device)
+        data_source, label_source = data_source.to(device), label_source.to(device)
+        data_target, label_target = data_target.to(device), label_target.to(device)
 
         optimizer.zero_grad()
         label_source_pred, loss_coral = model(data_source, data_target)

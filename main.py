@@ -21,14 +21,16 @@ def train(epoch, model, device='cpu'):
     print("""\n\n========== EPOCH {} of {} ===========
 learning rate{: .6f}""".format(epoch, settings.epochs, LEARNING_RATE) )
 
-    if args.opt == 'SGD':
+    if settings.opt == 'SGD':
+        print('Use SGD')
         optimizer = torch.optim.SGD([{'params': model.parameters()}], lr=LEARNING_RATE, momentum=settings.momentum, 
                                     weight_decay=settings.l2_decay)
-    elif args.opt == 'Adam':
+    elif settings.opt == 'Adam':
+        print('Use Adam')
         optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=LEARNING_RATE, 
                                      weight_decay=settings.l2_decay)
-    elif args.opt == 'RMSprop':
-        print('using RMSPROP')
+    elif settings.opt == 'RMSprop':
+        print('Use RMSprop')
         optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=LEARNING_RATE,
                                      weight_decay=settings.l2_decay)
 
