@@ -5,9 +5,12 @@ import utils
 import argparse
 import math
 import torch
+import os
 from torch.autograd import Variable
 import torch.nn.functional as F
 import matplotlib.pyplot as plt
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
 
 testing_statistic = []
 plot_epochs_train, y_train, plot_epochs_test, y_test, acc_train, acc_test = [], [], [], [], [], []
