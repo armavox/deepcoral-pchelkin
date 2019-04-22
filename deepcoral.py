@@ -13,7 +13,7 @@ import matplotlib.pyplot as plt
 import utils
 import numpy as np
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
 
 training_statistic = []
 testing_statistic = []

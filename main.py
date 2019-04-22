@@ -27,6 +27,10 @@ learning rate{: .6f}""".format(epoch, settings.epochs, LEARNING_RATE) )
     elif args.opt == 'Adam':
         optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=LEARNING_RATE, 
                                      weight_decay=settings.l2_decay)
+    elif args.opt == 'RMSprop':
+        print('using RMSPROP')
+        optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=LEARNING_RATE,
+                                     weight_decay=settings.l2_decay)
 
     model.train()
     iter_source = iter(data_loader.source_loader)
@@ -98,7 +102,7 @@ def test(model, dataset_loader, epoch, mode="training", device='cpu'):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--opt', type=str, default='SGD', 
-                    choices=['SGD', 'Adam'])
+                    choices=['SGD', 'Adam', 'RMSprop'])
     global args
     args = parser.parse_args()
 
