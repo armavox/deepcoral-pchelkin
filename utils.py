@@ -15,3 +15,7 @@ def save_net(model, path):
 def load_net(model, path):
     model.load_state_dict(torch.load(path))
     print('[INFO] Checkpoint {} loaded'.format(path))
+
+def get_model_name(model):
+    r = model.__repr__()
+    return r[:r.find('(')]

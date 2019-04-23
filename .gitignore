@@ -1,5 +1,5 @@
 .idea
-checkpoint.tar
+*.tar
 .vscode
 .ipynb_checkpoints
 *.ipynb

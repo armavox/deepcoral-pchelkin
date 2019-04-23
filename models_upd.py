@@ -111,7 +111,7 @@ class ResNet(nn.Module):
         self.avgpool = nn.AvgPool2d(7, stride=1)
         #self.avgpool = nn.AvgPool2d(6, stride=1, padding=2)
         self.baselayer = [self.conv1, self.bn1, self.layer1, self.layer2, self.layer3, self.layer4]
-        self.classifier = nn.Linear(2048, num_classes)
+        self.classifier = nn.Linear(18432, num_classes)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -143,6 +143,8 @@ class ResNet(nn.Module):
             source = self.resize(source)
             if target is not None:
                 target = self.resize(target)
+            else:
+                coral_loss = None
 
         source = self.conv1(source)
         if target is not None:
@@ -177,7 +179,6 @@ class ResNet(nn.Module):
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer4(source)
-        print('layer4', source.size())
         if target is not None:
             target = self.layer4(target)
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
@@ -188,16 +189,14 @@ class ResNet(nn.Module):
             target = self.avgpool(target)
 
         source = source.view(source.size(0), -1)
-        print('LAYER2', source.size())
         if target is not None:
             target = target.view(target.size(0), -1)
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         if resNet_main == True:
             source = self.classifier(source)
-            print('LAYERclass', source.size())
 
-        return source, target, coral_loss
+        return source, coral_loss
 
 
 class DeepCoral(nn.Module):
@@ -206,8 +205,8 @@ class DeepCoral(nn.Module):
         self.sharedNet = resnet50(settings.use_checkpoint)
         # self.cls_fc = nn.Linear(2048, num_classes)
 
-    def forward(self, source, target):
-        source, target, coral_loss = self.sharedNet(source, target)
+    def forward(self, source, target=None):
+        source, coral_loss = self.sharedNet(source, target)
         source = self.sharedNet.classifier(source)
 
         return source, coral_loss

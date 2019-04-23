@@ -1,153 +1,202 @@
-import models
-import settings
-import data_loader
-import utils
-import argparse
-import math
-import torch
 import os
-from torch.autograd import Variable
+import numpy as np
+import torch
+import argparse
 import torch.nn.functional as F
+import torchvision.models as tvmodels
 import matplotlib.pyplot as plt
+from sklearn.metrics import roc_auc_score, roc_curve
 
-os.environ["CUDA_VISIBLE_DEVICES"] = "0, 1"
+import data_loader
+import models_upd as models
+import settings
+import utils
+from classifier import ClassifierModel
+from original_model import AlexNet
+    # LEARNING_RATE = settings.lr / math.pow((1 + 10 * (epoch - 1) / settings.epochs), 0.75)
 
-testing_statistic = []
-plot_epochs_train, y_train, plot_epochs_test, y_test, acc_train, acc_test = [], [], [], [], [], []
+def train(epoch, model, data_loader, optimizer, loss_func, device='cpu', deepcoral=False):
+    learning_rate = optimizer.state_dict()['param_groups'][0]['lr']
+    print("""\n========== EPOCH {} of {} ===========
+learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
+    
+    if deepcoral:
+        model.train()
+        iter_source = iter(data_loader.train_loader)
+        iter_target = iter(data_loader.target_loader)
+        num_iter = data_loader.len_train_loader
+        for i in range(1, num_iter):
+            data_source, label_source = iter_source.next()
+            data_target, label_target = iter_target.next()
+            if i % data_loader.len_target_loader == 0:
+                iter_target = iter(data_loader.target_loader)
 
-def train(epoch, model, device='cpu'):
-    result = []
-    LEARNING_RATE = settings.lr / math.pow((1 + 10 * (epoch - 1) / settings.epochs), 0.75)
-    print("""\n\n========== EPOCH {} of {} ===========
-learning rate{: .6f}""".format(epoch, settings.epochs, LEARNING_RATE) )
+            data_source, label_source = data_source.to(device), label_source.to(device)
+            data_target, label_target = data_target.to(device), label_target.to(device)
 
-    if settings.opt == 'SGD':
-        print('Use SGD')
-        optimizer = torch.optim.SGD([{'params': model.parameters()}], lr=LEARNING_RATE, momentum=settings.momentum, 
-                                    weight_decay=settings.l2_decay)
-    elif settings.opt == 'Adam':
-        print('Use Adam')
-        optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=LEARNING_RATE, 
-                                     weight_decay=settings.l2_decay)
-    elif settings.opt == 'RMSprop':
-        print('Use RMSprop')
-        optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=LEARNING_RATE,
-                                     weight_decay=settings.l2_decay)
+            label_source_pred, loss_coral = model(data_source, data_target)
+            loss_cls = loss_func(label_source_pred, label_source)
+            gamma = 2  / (1 + np.exp(-10 * (epoch) / settings.epochs)) - 1
+            loss_coral = torch.mean(loss_coral)
+            loss = loss_cls + gamma * loss_coral
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
 
-    model.train()
-    iter_source = iter(data_loader.source_loader)
-    num_iter = data_loader.len_source_loader
-    for i in range(1, num_iter):
-        data_source, label_source = iter_source.next()
-        data_source, label_source = Variable(data_source).to(device), Variable(label_source).to(device)
+            if i % settings.log_interval == 0:
+                print(
+                    'Train Epoch: {} [{}/{} ({:.0f}%)]\ttotal_Loss: {:.8f} cls_Loss: {:.8f} coral_Loss: {:.8f}'.format(
+                    epoch, i * len(data_source), data_loader.len_train_dataset,
+                    100. * i / data_loader.len_train_loader, loss.item(), loss_cls.item(), loss_coral.item()))
+    else:
+        model.train()
+        iter_source = iter(data_loader.train_loader)
+        num_iter = data_loader.len_train_loader
+        for i in range(1, num_iter):
+            data_source, label_source = iter_source.next()
+            data_source, label_source = data_source.to(device), label_source.to(device)
 
-        optimizer.zero_grad()
-        label_source_pred = model(data_source)
-        loss = F.nll_loss(F.log_softmax(label_source_pred, dim=1), label_source)
-        loss.backward()
-        optimizer.step()
-        if i % settings.log_interval == 0:
-            print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, i * len(data_source), data_loader.len_source_dataset,
-                100. * i / data_loader.len_source_loader, 
-                loss.data))
+            label_source_pred = model(data_source)
+            loss = loss_func(label_source_pred, label_source)
+            loss.backward()
+            optimizer.step()
+            optimizer.zero_grad()
+            if i % settings.log_interval == 0:
+                print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
+                    epoch, i * len(data_source), data_loader.len_train_dataset,
+                    100. * i / data_loader.len_train_loader, 
+                    loss.data))
+    epoch_train.append(epoch)
+    loss_train.append(loss)
 
-        result.append({
-            'epoch': epoch,
-            'step': i + 1,
-            'total_steps': num_iter,
-            'loss': loss.data,  # classification_loss.data[0]
-        })
-
-    return result
-
-
-def test(model, dataset_loader, epoch, mode="training", device='cpu'):
+def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
     model.eval()
     test_loss = 0
     correct = 0
+    pred_list = np.array([])
+    target_list = np.array([])
     with torch.no_grad():
         for data, target in dataset_loader:
-            data, target = Variable(data).to(device), Variable(target).to(device)
-            s_output = model(data)
-            test_loss += F.nll_loss(F.log_softmax(s_output, dim=1), target, reduction='sum').data # sumup batchloss
-            pred = s_output.data.max(1)[1] # get the index of the max log-probability
+            data, target = data.to(device), target.to(device)
+            output = model(data)
+            test_loss += loss_func(output, target, reduction='sum')
+            pred = output.data.max(1)[1] # get the index of the max log-probability
             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
 
+            pred_prob = torch.nn.Softmax(1)(output.data)[:, 1]
+            pred_list = np.hstack((pred_list, pred_prob.cpu().view(-1).numpy()))
+            target_list = np.hstack((target_list, target.cpu().view(-1).numpy()))
+
+    roc_auc = roc_auc_score(target_list, pred_list)
     test_loss /= len(dataset_loader.dataset)
+
     accuracy = 100. * correct / len(dataset_loader.dataset)
-    print("""Mode: {}, Epoch: {}, Average loss: {:.4f}, Accuracy: {}/{} ({:.2f}%)"""
-        .format(
-        mode, epoch, test_loss, correct, len(dataset_loader.dataset), accuracy))
+    print('{:4} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%),\t ROC-AUC: {:.2f}'.format(
+        mode, test_loss, correct, len(dataset_loader.dataset),
+        100. * correct / len(dataset_loader.dataset), roc_auc))
 
-    testing_statistic.append({
-        'data': mode,
-        'epoch': epoch,
-        'average_loss': test_loss,
-        'correct': correct,
-        'total': len(dataset_loader.dataset),
-        'accuracy':  accuracy
-    })
-
-    if mode == "training":
-        plot_epochs_train.append(epoch)
-        y_train.append(test_loss.item())
-        acc_train.append(accuracy)
-    elif mode == "testing":
-        plot_epochs_test.append(epoch)
-        y_test.append(test_loss.item())
+    if mode == "Val":
+        epoch_val.append(epoch)
+        loss_val.append(test_loss.item())
+        acc_val.append(accuracy)
+        roc_auc_val.append(roc_auc)
+    elif mode == "Test":
+        epoch_test.append(epoch)
+        loss_test.append(test_loss.item())
         acc_test.append(accuracy)
+        roc_auc_test.append(roc_auc)
 
-    return correct
+    return accuracy
 
 
 if __name__ == '__main__':
+    # === ARGUMENT PARSER ===
     parser = argparse.ArgumentParser()
-    parser.add_argument('--opt', type=str, default='SGD', 
-                    choices=['SGD', 'Adam', 'RMSprop'])
-    global args
+    requiredNamed = parser.add_argument_group('Required named arguments')
+    requiredNamed.add_argument('--cuda', type=str, default='all', choices=['all', 'no', '0', '1'], required=True)
     args = parser.parse_args()
 
-    models.resNet_main = True
-    model = models.resnet50(settings.use_checkpoint)
-    # if torch.cuda.is_available():
-    #     model.cuda()
-    correct = 0
+    if args.cuda == 'all':
+        os.environ["CUDA_VISIBLE_DEVICES"] = '0, 1'
+    elif args.cuda == 'no':
+        os.environ["CUDA_VISIBLE_DEVICES"] = ''
+    else:
+        os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
+    
+    # === KEY DEFINITIONS ===
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    
+    # -> Model
+    # model = ClassifierModel(n_classes=2)
+    # model = AlexNet(2)
+    # model = models.DeepCoral(num_classes=2)
+    model = tvmodels.vgg19_bn(pretrained=True)
+    model.features[0] = torch.nn.Conv2d(1, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    model.classifier[-1] = torch.nn.Linear(4096, 2)
     if torch.cuda.is_available():
         if torch.cuda.device_count() > 1:
             print(f'{torch.cuda.device_count()} GPUs used')
             model = torch.nn.DataParallel(model)
         model = model.to(device)
-   #  print(model)
+    print(model)
 
-    training_statistic = []
+    # -> Optimizer
+    print(f'Optimizer: {settings.opt}')
+    if settings.opt == 'SGD':
+        optimizer = torch.optim.SGD([{'params': model.parameters()}], lr=settings.lr, momentum=settings.momentum, 
+                                    weight_decay=settings.l2_decay)
+    elif settings.opt == 'Adam':
+        optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=settings.lr, weight_decay=settings.l2_decay)
 
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=15)
+    # # lamb1 = lambda epoch: 1 / math.pow((1 + 10 * (epoch - 1) / settings.epochs), 0.75)
+    # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
+    
+    # -> Loss
+    def nll_loss(pred, label, reduction='mean'):
+        return F.nll_loss(F.log_softmax(pred, dim=1), label, reduction=reduction)
+    loss_func = nll_loss
+
+    # -> Data
+    data_loader = data_loader
+
+    epoch_val, loss_val, epoch_test, loss_test, acc_val, acc_test = [], [], [], [], [], []
+    epoch_train, loss_train, roc_auc_val, roc_auc_test = [], [], [], []
+
+    # === TRAINING ===
     for epoch in range(1, settings.epochs + 1):
-        res = train(epoch, model, device)
-        training_statistic.append(res)
+        
+        #train
+        train(epoch, model, data_loader, optimizer, loss_func, device=device, deepcoral=settings.deepcoral)
+        #val
+        accuracy = test(epoch, model, data_loader.val_loader, loss_func, mode="Val", device=device)
+        #test
+        test(epoch, model, data_loader.target_loader, loss_func, mode="Test", device=device)
+        scheduler.step(accuracy.item())
 
-        test(model, data_loader.source_loader, epoch=epoch, mode="training", device=device)
-        t_correct = test(model, data_loader.target_test_loader, epoch=epoch, mode="testing", device=device)
-
-        if t_correct > correct:
-            correct = t_correct
-        print('source: {} max correct: {} max target accuracy{: .2f}%\n'.format(
-              settings.source_name, correct, 100. * correct / data_loader.len_target_dataset))
-
-    fig, ax = plt.subplots(1, 2, figsize=(16,5))
-    ax[0].plot(plot_epochs_train, y_train, 'g', label='train')
-    ax[0].plot(plot_epochs_test, y_test, 'r', label='val')
+    # === SAVE PLOTS AT THE END ===
+    fig, ax = plt.subplots(1, 3, figsize=(20,5))
+    ax[0].plot(epoch_train, loss_train, 'b', label='train')
+    ax[0].plot(epoch_val, loss_val, 'g', label='val')
+    ax[0].plot(epoch_test, loss_test, 'r', label='test')
     ax[0].set_title('Loss')
     ax[0].legend()
 
-    ax[1].plot(plot_epochs_train, acc_train, 'g', label='train')
-    ax[1].plot(plot_epochs_test, acc_test, 'r', label='val')
+    ax[1].plot(epoch_val, acc_val, 'g', label='val')
+    ax[1].plot(epoch_test, acc_test, 'r', label='test')
     ax[1].set_title('Accuracy')
     ax[1].legend()
-    fig.suptitle('ResNet50 w/o DeepCORAL', fontsize=18)
-    fig.savefig(f'result_plots/resnet50_ep{settings.epochs}_opt{args.opt}_bs{settings.batch_size}_L2{settings.l2_decay}_lr{settings.lr}.png', dpi=90)
 
-    # utils.save(training_statistic, 'training_statistic.pkl')
-    # utils.save(testing_statistic, 'testing_statistic.pkl')
-    utils.save_net(model, 'checkpoint.tar')
+    ax[2].plot(epoch_val, roc_auc_val, 'g', label='val')
+    ax[2].plot(epoch_test, roc_auc_test, 'r', label='test')
+    ax[2].set_title('ROC-AUC')
+    ax[2].legend()
+
+    wo = 'w/' if settings.deepcoral else 'w/o'
+    fig.suptitle(f'{wo} DeepCORAL', fontsize=18)
+    fig_name = f'result_plots/deepcoral{settings.deepcoral}_ep{settings.epochs}\
+_opt{settings.opt}_bs{settings.batch_size}_L2{settings.l2_decay}_lr{settings.lr}.png'
+    fig.savefig(fig_name, dpi=90)
+
+    model_name = utils.get_model_name(model)
+    utils.save_net(model, f'{model_name}_checkpoint.tar')
