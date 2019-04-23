@@ -56,7 +56,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
             data_source, label_source = iter_source.next()
             data_source, label_source = data_source.to(device), label_source.to(device)
 
-            label_source_pred = model(data_source)
+            label_source_pred, _ = model(data_source)
             loss = loss_func(label_source_pred, label_source)
             loss.backward()
             optimizer.step()
@@ -81,11 +81,12 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
             if settings.deepcoral:
                 output, _ = model(data)
             else:
-                output = model(data)
-            test_loss += loss_func(output, target, reduction='sum')
+                output, _ = model(data)
+            test_loss += loss_func(output, target)#, reduction='sum')
             pred = output.data.max(1)[1] # get the index of the max log-probability
+            if mode == 'Train':
+                print(pred, target)
             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
-
             pred_prob = torch.nn.Softmax(1)(output.data)[:, 1]
             pred_list = np.hstack((pred_list, pred_prob.cpu().view(-1).numpy()))
             target_list = np.hstack((target_list, target.cpu().view(-1).numpy()))
@@ -131,17 +132,39 @@ if __name__ == '__main__':
     
     # -> Model
     # model = ClassifierModel(n_classes=2)
-    # model = AlexNet(2)
-    model = models.DeepCoral(num_classes=2)
-    # model = tvmodels.vgg19_bn(pretrained=True)
-    # model.features[0] = torch.nn.Conv2d(1, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    # model.classifier[-1] = torch.nn.Linear(4096, 2)
+    model = AlexNet(2)
+    # model = models.DeepCoral(num_classes=2)
+    class Model(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = model = tvmodels.resnet101(pretrained=False)
+            self.model.conv1 = torch.nn.Conv2d(1, 64, kernel_size=(7, 7), stride=(2, 2), padding=(3, 3), bias=False)
+            self.model.fc = torch.nn.Linear(2048, 2, bias=True)
+        def forward(self, source, target=None):
+            source = self.model(source)
+            return source, None
+    # model = Model()
+    class SuperSimple(torch.nn.Module):
+        def __init__(self):
+            super().__init__()
+            self.model = torch.nn.Sequential(
+                # torch.nn.Linear(16384, 4096),
+                torch.nn.Linear(4096, 2048),
+                torch.nn.Linear(2048, 1024),
+                torch.nn.Linear(1024, 2)
+            )
+        def forward(self, source):
+            source = source.view(source.size(0), -1)
+            source = self.model(source)
+            return source, None
+    # model = SuperSimple()
+
+    print(utils.get_model_name(model))
     if torch.cuda.is_available():
         if torch.cuda.device_count() > 1:
             print(f'{torch.cuda.device_count()} GPUs used')
             model = torch.nn.DataParallel(model)
         model = model.to(device)
-    print(model)
 
     # -> Optimizer
     print(f'Optimizer: {settings.opt}')
@@ -158,7 +181,9 @@ if __name__ == '__main__':
     # -> Loss
     def nll_loss(pred, label, reduction='mean'):
         return F.nll_loss(F.log_softmax(pred, dim=1), label, reduction=reduction)
-    loss_func = nll_loss
+    loss_func = torch.nn.CrossEntropyLoss()
+    train_loss = torch.nn.CrossEntropyLoss()
+    test_loss = torch.nn.CrossEntropyLoss(reduction='sum')
 
     # -> Data
     data_loader = data_loader
@@ -170,18 +195,19 @@ if __name__ == '__main__':
     for epoch in range(1, settings.epochs + 1):
         
         #train
-        train(epoch, model, data_loader, optimizer, loss_func, device=device, deepcoral=settings.deepcoral)
+        train(epoch, model, data_loader, optimizer, train_loss, device=device, deepcoral=settings.deepcoral)
+        test(epoch, model, data_loader.train_loader, test_loss, mode="Train", device=device)
         #val
-        accuracy = test(epoch, model, data_loader.val_loader, loss_func, mode="Val", device=device)
+        accuracy = test(epoch, model, data_loader.val_loader, test_loss, mode="Val", device=device)
         #test
-        test(epoch, model, data_loader.target_loader, loss_func, mode="Test", device=device)
+        test(epoch, model, data_loader.target_loader, test_loss, mode="Test", device=device)
         scheduler.step(accuracy.item())
 
     # === SAVE PLOTS AT THE END ===
     fig, ax = plt.subplots(1, 3, figsize=(20,5))
     ax[0].plot(epoch_train, loss_train, 'b', label='train')
-    ax[0].plot(epoch_val, loss_val, 'g', label='val')
-    ax[0].plot(epoch_test, loss_test, 'r', label='test')
+    # ax[0].plot(epoch_val, loss_val, 'g', label='val')
+    # ax[0].plot(epoch_test, loss_test, 'r', label='test')
     ax[0].set_title('Loss')
     ax[0].legend()
 

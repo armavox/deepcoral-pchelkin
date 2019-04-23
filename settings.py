@@ -1,8 +1,8 @@
 # Training settings
-epochs = 3
+epochs = 128
 
 lr = 0.001
-batch_size = 16
+batch_size = 8
 momentum = 0.9
 l2_decay = 5e-4
 
@@ -14,11 +14,11 @@ log_interval = 100  # Log every N batches
 
 train_path = "./dataset/"
 val_path = "./dataset/"
-source_name = "luna_nodules"
-target_name = "source"
+source_name = "kaggle_nodules"
+target_name = "luna_nodules"
 use_checkpoint = False
 image_size = [64, 64]
 weighted = False
 
 small_dataset = True
-small_size = 0.1
+small_size = 0.02

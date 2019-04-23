@@ -7,8 +7,10 @@ import settings as sett
 def load_training(root_path, dir, batch_size):
     transform = transforms.Compose(
         [transforms.Resize([sett.image_size[0], sett.image_size[1]]),
-         transforms.Grayscale(),
-         transforms.ToTensor()])
+         transforms.Grayscale(num_output_channels=1),
+         transforms.ToTensor(),
+         transforms.Normalize(mean=[0.449], std=[0.226])
+         ])
     data = datasets.ImageFolder(root=root_path + dir, transform=transform)
 
     ### SMALL DATASET FOR EXPERIMENTS ###
@@ -23,7 +25,7 @@ def load_training(root_path, dir, batch_size):
     # else:
     #     train_loader = DataLoader(data, batch_size=batch_size, shuffle=True, drop_last=True)
 
-    np.random.seed(sett.seed)  # TODO: saving indices for test phase
+    # np.random.seed(sett.seed)  # TODO: saving indices for test phase
     train_inds, val_inds = train_val_holdout_split(data, ratios=[0.8,0.2])
     train_sampler = SubsetRandomSampler(train_inds)
     val_sampler = SubsetRandomSampler(val_inds)
@@ -36,7 +38,7 @@ def load_training(root_path, dir, batch_size):
 def load_testing(root_path, dir, batch_size):
     transform = transforms.Compose(
         [transforms.Resize([sett.image_size[0], sett.image_size[1]]),
-         transforms.Grayscale(),
+         transforms.Grayscale(num_output_channels=1),
          transforms.ToTensor()])
     data = datasets.ImageFolder(root=root_path + dir, transform=transform)
 

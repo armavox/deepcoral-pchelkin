@@ -6,7 +6,7 @@ from coral import CORAL
 def conv2d(in_channels, out_channels, padding, kernel_size=3):
     return nn.Sequential(
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=padding),
-        nn.BatchNorm2d(num_features=out_channels),
+        # nn.BatchNorm2d(num_features=out_channels),
         nn.ELU(alpha=0.7),
         # nn.Dropout2d(),
         nn.MaxPool2d(kernel_size=2)
@@ -16,7 +16,7 @@ def conv2d(in_channels, out_channels, padding, kernel_size=3):
 def dense(in_channels, out_channels):
     return nn.Sequential(
         nn.Linear(in_features=in_channels, out_features=out_channels),
-        nn.BatchNorm1d(num_features=out_channels),
+        # nn.BatchNorm1d(num_features=out_channels),
         nn.ELU(alpha=0.7),
         # nn.Dropout()
     )
@@ -36,9 +36,9 @@ class ClassifierModel(nn.Module):
         self.layer0 = conv2d(1, 64, 0)
         self.layer1 = conv2d(64, 128, 0)
         self.layer2 = conv2d(128, 256, 0)
-        self.layer3 = nn.Sequential(conv2d(256, 512, 0), conv2d(512, 1024, 0)) 
-        self.layer4 = nn.Sequential(dense(4096, 2048), dense(2048, 64))
-        self.layer5 = dense_softmax(64, n_classes)
+        self.layer3 = conv2d(256, 512, 0)
+        self.layer4 = dense(2048, 1024)
+        self.layer5 = dense_softmax(1024, n_classes)
 
 
     def forward(self, source, target=None):
