@@ -43,7 +43,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
             optimizer.step()
             optimizer.zero_grad()
 
-            if i % settings.log_interval == 0:
+            if i % settings.log_interval == 0 or i == num_iter - 1:
                 print(
                     'Train Epoch: {} [{}/{} ({:.0f}%)]\ttotal_Loss: {:.8f} cls_Loss: {:.8f} coral_Loss: {:.8f}'.format(
                     epoch, i * len(data_source), data_loader.len_train_dataset,
@@ -61,7 +61,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
             loss.backward()
             optimizer.step()
             optimizer.zero_grad()
-            if i % settings.log_interval == 0:
+            if i % settings.log_interval == 0 or i == num_iter-1:
                 print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                     epoch, i * len(data_source), data_loader.len_train_dataset,
                     100. * i / data_loader.len_train_loader, 
@@ -78,7 +78,10 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
     with torch.no_grad():
         for data, target in dataset_loader:
             data, target = data.to(device), target.to(device)
-            output = model(data)
+            if settings.deepcoral:
+                output, _ = model(data)
+            else:
+                output = model(data)
             test_loss += loss_func(output, target, reduction='sum')
             pred = output.data.max(1)[1] # get the index of the max log-probability
             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
@@ -129,10 +132,10 @@ if __name__ == '__main__':
     # -> Model
     # model = ClassifierModel(n_classes=2)
     # model = AlexNet(2)
-    # model = models.DeepCoral(num_classes=2)
-    model = tvmodels.vgg19_bn(pretrained=True)
-    model.features[0] = torch.nn.Conv2d(1, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
-    model.classifier[-1] = torch.nn.Linear(4096, 2)
+    model = models.DeepCoral(num_classes=2)
+    # model = tvmodels.vgg19_bn(pretrained=True)
+    # model.features[0] = torch.nn.Conv2d(1, 64, kernel_size=(3, 3), stride=(1, 1), padding=(1, 1))
+    # model.classifier[-1] = torch.nn.Linear(4096, 2)
     if torch.cuda.is_available():
         if torch.cuda.device_count() > 1:
             print(f'{torch.cuda.device_count()} GPUs used')
