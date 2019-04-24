@@ -36,7 +36,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
 
             label_source_pred, loss_coral = model(data_source, data_target)
             loss_cls = loss_func(label_source_pred, label_source)
-            gamma = 2  / (1 + np.exp(-10 * (epoch) / settings.epochs)) - 1
+            gamma = np.exp(1/epoch)  / (1 + np.exp(-10 * (epoch) / settings.epochs))
             loss_coral = torch.mean(loss_coral)
             loss = loss_cls + gamma * loss_coral
             loss.backward()
@@ -45,9 +45,9 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
 
             if i % settings.log_interval == 0 or i == num_iter - 1:
                 print(
-                    'Train Epoch: {} [{}/{} ({:.0f}%)]\ttotal_Loss: {:.8f} cls_Loss: {:.8f} coral_Loss: {:.8f}'.format(
+                    'Train Epoch: {} [{}/{} ({:.0f}%)] total_Loss: {:.8f} cls_Loss: {:.8f} coral_Loss: {:.8f} g{:.4f}'.format(
                     epoch, i * len(data_source), data_loader.len_train_dataset,
-                    100. * i / data_loader.len_train_loader, loss.item(), loss_cls.item(), loss_coral.item()))
+                    100. * i / data_loader.len_train_loader, loss.item(), loss_cls.item(), gamma*loss_coral.item(), gamma))
     else:
         model.train()
         iter_source = iter(data_loader.train_loader)
@@ -55,7 +55,6 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
         for i in range(1, num_iter):
             data_source, label_source = iter_source.next()
             data_source, label_source = data_source.to(device), label_source.to(device)
-
             label_source_pred, _ = model(data_source)
             loss = loss_func(label_source_pred, label_source)
             loss.backward()
@@ -66,6 +65,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
                     epoch, i * len(data_source), data_loader.len_train_dataset,
                     100. * i / data_loader.len_train_loader, 
                     loss.data))
+
     epoch_train.append(epoch)
     loss_train.append(loss)
 
@@ -84,8 +84,8 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
                 output, _ = model(data)
             test_loss += loss_func(output, target)#, reduction='sum')
             pred = output.data.max(1)[1] # get the index of the max log-probability
-            if mode == 'Val':
-                print(pred, target)
+            # if mode == 'Val':
+            #     print(pred, target)
             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
             total += target.size(0)
             pred_prob = torch.nn.Softmax(1)(output.data)[:, 1]
@@ -95,7 +95,7 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
     roc_auc = roc_auc_score(target_list, pred_list)
     test_loss /= total
     accuracy = 100. * correct / total
-    print('{:4} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%),\t ROC-AUC: {:.2f}'.format(
+    print('{:5} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%),\t ROC-AUC: {:.2f}'.format(
         mode, test_loss, correct, total,
         100. * correct / total, roc_auc))
 
@@ -116,7 +116,9 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
 if __name__ == '__main__':
     # === ARGUMENT PARSER ===
     parser = argparse.ArgumentParser()
-    requiredNamed = parser.add_argument_group('Required named arguments')
+    parser.add_argument('-d', '--deepcoral', action='store_true', default=False)
+    parser.add_argument('-e', '--epochs', type=int)
+    requiredNamed = parser.add_argument_group('required named arguments')
     requiredNamed.add_argument('--cuda', type=str, default='all', choices=['all', 'no', '0', '1'], required=True)
     args = parser.parse_args()
 
@@ -127,6 +129,11 @@ if __name__ == '__main__':
     else:
         os.environ["CUDA_VISIBLE_DEVICES"] = args.cuda
     
+    if args.epochs:
+        settings.epochs = args.epochs
+    if args.deepcoral:
+        settings.deepcoral = True
+
     # === KEY DEFINITIONS ===
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
@@ -169,12 +176,21 @@ if __name__ == '__main__':
     # -> Optimizer
     print(f'Optimizer: {settings.opt}')
     if settings.opt == 'SGD':
-        optimizer = torch.optim.SGD([{'params': model.parameters()}], lr=settings.lr, momentum=settings.momentum, 
-                                    weight_decay=settings.l2_decay)
-    elif settings.opt == 'Adam':
-        optimizer = torch.optim.Adam([{'params': model.parameters()}], lr=settings.lr, weight_decay=settings.l2_decay)
+        optimizer = torch.optim.SGD([
+            {'params': model.parameters()}
+            ], lr=settings.lr, momentum=settings.momentum, weight_decay=settings.l2_decay, nesterov=True)
 
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', patience=15)
+    elif settings.opt == 'Adam':
+        optimizer = torch.optim.Adam([
+            {'params': model.parameters()}
+            ], lr=settings.lr, weight_decay=settings.l2_decay)
+
+    elif settings.opt == 'Adagrad':
+        optimizer = torch.optim.Adagrad([
+            {'params': model.parameters()}
+            ], lr=settings.lr, weight_decay=settings.l2_decay)
+
+    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='max', factor=0.8, patience=5)
     # # lamb1 = lambda epoch: 1 / math.pow((1 + 10 * (epoch - 1) / settings.epochs), 0.75)
     # scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=30, gamma=0.1)
     
@@ -182,7 +198,7 @@ if __name__ == '__main__':
     def nll_loss(pred, label, reduction='mean'):
         return F.nll_loss(F.log_softmax(pred, dim=1), label, reduction=reduction)
     loss_func = torch.nn.CrossEntropyLoss()
-    train_loss = torch.nn.CrossEntropyLoss()
+    train_loss = torch.nn.CrossEntropyLoss(reduction='mean')
     test_loss = torch.nn.CrossEntropyLoss(reduction='sum')
 
     # -> Data
@@ -204,7 +220,7 @@ if __name__ == '__main__':
         scheduler.step(accuracy.item())
 
     # === SAVE PLOTS AT THE END ===
-    fig, ax = plt.subplots(1, 3, figsize=(20,5))
+    fig, ax = plt.subplots(1, 3, figsize=(21, 5))
     ax[0].plot(epoch_train, loss_train, 'b', label='train')
     # ax[0].plot(epoch_val, loss_val, 'g', label='val')
     # ax[0].plot(epoch_test, loss_test, 'r', label='test')
@@ -222,10 +238,10 @@ if __name__ == '__main__':
     ax[2].legend()
 
     wo = 'w/' if settings.deepcoral else 'w/o'
-    fig.suptitle(f'{wo} DeepCORAL', fontsize=18)
-    fig_name = f'result_plots/deepcoral{settings.deepcoral}_ep{settings.epochs}\
+    fig.suptitle(f'{wo} DeepCORAL', fontsize=17)
+    model_name = utils.get_model_name(model)
+    fig_name = f'valid_results/{model_name}_deepcoral{settings.deepcoral}_ep{settings.epochs}\
 _opt{settings.opt}_bs{settings.batch_size}_L2{settings.l2_decay}_lr{settings.lr}.png'
     fig.savefig(fig_name, dpi=90)
 
-    model_name = utils.get_model_name(model)
-    utils.save_net(model, f'{model_name}_checkpoint.tar')
+    # utils.save_net(model, f'{model_name}_checkpoint.tar')

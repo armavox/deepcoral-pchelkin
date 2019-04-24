@@ -9,7 +9,7 @@ def load_training(root_path, dir, batch_size):
         [transforms.Resize([sett.image_size[0], sett.image_size[1]]),
          transforms.Grayscale(num_output_channels=1),
          transforms.ToTensor(),
-         transforms.Normalize(mean=[0.449], std=[0.226])
+         transforms.Normalize(mean=[torch.tensor(0.7290)], std=[0.3436])
          ])
     data = datasets.ImageFolder(root=root_path + dir, transform=transform)
 
@@ -35,14 +35,15 @@ def load_training(root_path, dir, batch_size):
 
     return train_loader, val_loader
 
-def load_testing(root_path, dir, batch_size):
+def load_testing(root_path, dir, batch_size, norm_mean, norm_std):
     transform = transforms.Compose(
         [transforms.Resize([sett.image_size[0], sett.image_size[1]]),
          transforms.Grayscale(num_output_channels=1),
-         transforms.ToTensor()])
+         transforms.ToTensor(),
+         transforms.Normalize(mean=[norm_mean], std=[norm_std])])
     data = datasets.ImageFolder(root=root_path + dir, transform=transform)
 
-    test_loader = DataLoader(data, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(data, batch_size=batch_size, shuffle=True, drop_last=True)
     return test_loader
 
 def make_weights_for_balanced_classes(images, nclasses):                        
@@ -86,7 +87,14 @@ def train_val_holdout_split(dataset, ratios=[0.8, 0.2]):
 
 
 train_loader, val_loader = load_training(sett.train_path, sett.source_name, sett.batch_size)
-target_loader = load_testing(sett.train_path, sett.target_name, sett.batch_size)
+for i, (data, label) in enumerate(train_loader):
+    if i == 0:
+        data_cumul = data
+    else:
+        data_cumul = torch.cat((data_cumul, data), dim=0)
+train_mean, train_std = data_cumul.mean(), data_cumul.std()
+
+target_loader = load_testing(sett.train_path, sett.target_name, sett.batch_size, train_mean, train_std)
 
 len_train_dataset = len(train_loader.dataset)
 len_target_dataset = len(target_loader.dataset)
@@ -95,13 +103,7 @@ len_target_loader = len(target_loader)
 
 
 if __name__ == "__main__":
-    for data, label in train_loader:
-        print(data.shape, label)
-    print('val==================')
-    for data, label in val_loader:
-        print(data.shape, label)
-    print('target==================')
-    for data, label in target_loader:
-        print(data, label)
+    pass
+
 
     # print(next(iter(train_loader)))

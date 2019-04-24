@@ -46,25 +46,25 @@ class ClassifierModel(nn.Module):
         source = self.layer0(source)
         if target is not None:
             target = self.layer0(target)
-            # coral_loss = CORAL(source, target)
+            coral_loss = CORAL(source, target)
         else:
             coral_loss = None
 
         source = self.layer1(source)
         if target is not None:
             target = self.layer1(target)
-            # coral_loss = torch.cat((coral_loss, CORAL(source, target)))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
         
         source = self.layer2(source)
         if target is not None:
             target = self.layer2(target)
-            # coral_loss = torch.cat((coral_loss, CORAL(source, target)))
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer3(source)
         # print(source.size())
         if target is not None:
             target = self.layer3(target)
-            coral_loss = CORAL(source, target)
+            coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = source.view(source.size(0), -1)
         if target is not None:
