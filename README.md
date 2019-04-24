@@ -1,6 +1,8 @@
 # DeepCORAL Implementation for Lung Cancer Domain Adaptation
+pytorch implementation of the method, published in paper **Deep CORAL: Correlation Alignment for Deep Domain Adaptation** by Baochen Sun, Kate Saenko 
+https://arxiv.org/abs/1607.01719
 
-*research in process*
+*research in progress*
 
 ## Dependencies
 
