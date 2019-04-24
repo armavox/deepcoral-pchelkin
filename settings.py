@@ -14,11 +14,11 @@ log_interval = 100  # Log every N batches
 
 train_path = "./dataset/"
 val_path = "./dataset/"
-source_name = "kaggle_nodules"
-target_name = "luna_nodules"
+source_name = "office31_source"
+target_name = "office31_target"
 use_checkpoint = False
 image_size = [64, 64]
 weighted = False
 
-small_dataset = True
+small_dataset = False
 small_size = 0.02

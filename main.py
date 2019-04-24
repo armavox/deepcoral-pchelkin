@@ -72,7 +72,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
 def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
     model.eval()
     test_loss = 0
-    correct = 0
+    correct, total = 0, 0
     pred_list = np.array([])
     target_list = np.array([])
     with torch.no_grad():
@@ -84,20 +84,20 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
                 output, _ = model(data)
             test_loss += loss_func(output, target)#, reduction='sum')
             pred = output.data.max(1)[1] # get the index of the max log-probability
-            if mode == 'Train':
+            if mode == 'Val':
                 print(pred, target)
             correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+            total += target.size(0)
             pred_prob = torch.nn.Softmax(1)(output.data)[:, 1]
             pred_list = np.hstack((pred_list, pred_prob.cpu().view(-1).numpy()))
             target_list = np.hstack((target_list, target.cpu().view(-1).numpy()))
 
     roc_auc = roc_auc_score(target_list, pred_list)
-    test_loss /= len(dataset_loader.dataset)
-
-    accuracy = 100. * correct / len(dataset_loader.dataset)
+    test_loss /= total
+    accuracy = 100. * correct / total
     print('{:4} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%),\t ROC-AUC: {:.2f}'.format(
-        mode, test_loss, correct, len(dataset_loader.dataset),
-        100. * correct / len(dataset_loader.dataset), roc_auc))
+        mode, test_loss, correct, total,
+        100. * correct / total, roc_auc))
 
     if mode == "Val":
         epoch_val.append(epoch)
