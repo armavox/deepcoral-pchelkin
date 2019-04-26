@@ -221,6 +221,7 @@ class Trainer(BaseEstimator):
         fig_name = f'valid_results/{model_name}_deepcoral{self.deepcoral}_ep{settings.epochs}\
         _opt{self.optimizer_name}_bs{self.batch_size}_L2{self.l2_decay}_lr{self.learning_rate}_momentum{self.momentum}.png'
         fig.savefig(fig_name, dpi=90)
+        plt.close(fig)
 
         self.score_v = acc_val[-1]
 
