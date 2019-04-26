@@ -112,7 +112,7 @@ def test(model, dataset_loader, loss_func, mode="Val", device='cpu'):
 
 
 class Trainer(BaseEstimator):
-    def __init__(self, num_classes, model_name, batch_size=8, optimizer='Adam', learning_rate=0.01, l2_decay=5e-4, momentum=0.9, deepcoral=False, device='cpu'):
+    def __init__(self, num_classes, model_name, scheduler, lr_decay_epoch=10, batch_size=8, optimizer='Adam', learning_rate=0.01, l2_decay=5e-4, momentum=0.9, deepcoral=False, device='cpu'):
         print("ok")
         self.model_name = model_name
         self.model = None
@@ -127,7 +127,8 @@ class Trainer(BaseEstimator):
         self.optimizer_name = optimizer
         self.optimizer = None
         self.device = device
-        self.scheduler = None
+        self.scheduler = scheduler
+        self.lr_decay_epoch = lr_decay_epoch
         self.score_v = 0
 
     def __setup_model(self, num_classes):
@@ -160,9 +161,7 @@ class Trainer(BaseEstimator):
 
     def fit(self, X, y):
         self.__setup_model(self.num_classes)
-
         self.optimizer = self.__create_optimizer(self.optimizer_name, self.learning_rate, self.l2_decay, self.momentum)
-        self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.8, patience=5)
 
         train_loss = nn.CrossEntropyLoss(reduction='mean')
         test_loss = nn.CrossEntropyLoss(reduction='sum')
@@ -176,6 +175,8 @@ class Trainer(BaseEstimator):
             learning_rate = self.optimizer.state_dict()['param_groups'][0]['lr']
             print("""\n========== EPOCH {} of {} ===========
             learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate))
+
+            self.optimizer = self.scheduler(self.optimizer, epoch, init_lr=self.learning_rate, lr_decay_epoch=self.lr_decay_epoch)
 
             self.model.train()
             if self.deepcoral:
@@ -277,7 +278,7 @@ if __name__ == '__main__':
 
     for model_name in models:
         X, y = [1, 2, 3], [1, 2, 3]
-        clf = Trainer(num_classes, model_name, deepcoral=deepcoral, device=device)
+        clf = Trainer(num_classes, model_name, deepcoral=deepcoral, device=device, scheduler=utils.exp_lr_scheduler, lr_decay_epoch=10)
         random_search = RandomizedSearchCV(clf, param_distributions=param_dist, n_iter=n_iter_search, cv=2)
         random_search.fit(X, y)
 
