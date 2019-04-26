@@ -114,13 +114,14 @@ def test(model, dataset_loader, loss_func, mode="Val", device='cpu'):
 class Trainer(BaseEstimator):
     def __init__(self, num_classes, model_name, batch_size=8, optimizer='Adam', learning_rate=0.01, l2_decay=5e-4, momentum=0.9, deepcoral=False, device='cpu'):
         print("ok")
-        self.model_name = model
+        self.model_name = model_name
         self.model = None
         self.batch_size = batch_size
         self.l2_decay = l2_decay
         self.learning_rate = learning_rate
-        # self.data_loader = DatasetLoader(batch_size)
+        self.data_loader = DatasetLoader(batch_size)
         self.momentum = momentum
+        self.num_classes = num_classes
 
         self.deepcoral = deepcoral
         self.optimizer = None
@@ -129,7 +130,7 @@ class Trainer(BaseEstimator):
         self.scheduler = None
         self.score_v = 0
 
-    def __setup_model(self):
+    def __setup_model(self, num_classes):
         if self.model_name == "Alex":
             self.model = AlexNet(num_classes=num_classes)
         elif self.model_name == "Deep":
@@ -158,8 +159,8 @@ class Trainer(BaseEstimator):
         return opt
 
     def fit(self, X, y):
-        self.__setup_model()
-        
+        self.__setup_model(self.num_classes)
+
         self.optimizer = self.__create_optimizer(self.optimizer_name, self.learning_rate, self.l2_decay, self.momentum)
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.8, patience=5)
 
