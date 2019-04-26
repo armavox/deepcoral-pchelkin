@@ -2,9 +2,11 @@
 epochs = 1
 
 lr = 0.01
+lr_decay_epoch = 10
+lr_decay_weight = 0.95
 batch_size = 8
 momentum = 0.9
-l2_decay = 5e-4
+l2_decay = 5e-5
 
 opt = 'SGD'
 deepcoral = False
