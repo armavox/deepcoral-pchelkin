@@ -158,10 +158,10 @@ class Trainer(BaseEstimator):
         return opt
 
     def fit(self, X, y):
+        self.__setup_model()
+        
         self.optimizer = self.__create_optimizer(self.optimizer_name, self.learning_rate, self.l2_decay, self.momentum)
         self.scheduler = optim.lr_scheduler.ReduceLROnPlateau(self.optimizer, mode='max', factor=0.8, patience=5)
-
-        self.__setup_model()
 
         train_loss = nn.CrossEntropyLoss(reduction='mean')
         test_loss = nn.CrossEntropyLoss(reduction='sum')
