@@ -19,7 +19,7 @@ import argparse
 
 from classifier import ClassifierModel
 from original_model import AlexNet
-from models import DeepCoral
+from models_upd import DeepCoral
 
 from sklearn.model_selection import RandomizedSearchCV
 
