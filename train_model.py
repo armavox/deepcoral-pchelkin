@@ -124,8 +124,8 @@ class Trainer(BaseEstimator):
         self.num_classes = num_classes
 
         self.deepcoral = deepcoral
-        self.optimizer = None
         self.optimizer_name = optimizer
+        self.optimizer = None
         self.device = device
         self.scheduler = None
         self.score_v = 0
