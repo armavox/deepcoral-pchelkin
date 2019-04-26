@@ -222,3 +222,18 @@ def resnet50(load):
     if load == True:
         utils.load_net(model, "checkpoint.tar")
     return model
+
+
+class SuperSimple(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = torch.nn.Sequential(
+            # torch.nn.Linear(16384, 4096),
+            torch.nn.Linear(4096, 2048),
+            torch.nn.Linear(2048, 1024),
+            torch.nn.Linear(1024, 2)
+        )
+    def forward(self, source):
+        source = source.view(source.size(0), -1)
+        source = self.model(source)
+        return source, None

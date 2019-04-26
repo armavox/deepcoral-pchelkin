@@ -43,7 +43,7 @@ def load_testing(root_path, dir, batch_size, norm_mean, norm_std):
          transforms.Normalize(mean=[norm_mean], std=[norm_std])])
     data = datasets.ImageFolder(root=root_path + dir, transform=transform)
 
-    test_loader = DataLoader(data, batch_size=batch_size, shuffle=True, drop_last=True)
+    test_loader = DataLoader(data, batch_size=batch_size, shuffle=False, drop_last=True)
     return test_loader
 
 def make_weights_for_balanced_classes(images, nclasses):                        
@@ -103,7 +103,10 @@ len_target_loader = len(target_loader)
 
 
 if __name__ == "__main__":
-    pass
+    print(train_loader.dataset.dataset.classes)
+    print(val_loader.dataset.dataset.classes)
+    print(target_loader.dataset.classes)
 
+    print(next(iter(train_loader)))
+    print(next(iter(target_loader)))
 
-    # print(next(iter(train_loader)))

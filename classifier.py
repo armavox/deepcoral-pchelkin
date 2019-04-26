@@ -6,7 +6,7 @@ from coral import CORAL
 def conv2d(in_channels, out_channels, padding, kernel_size=3):
     return nn.Sequential(
         nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=3, stride=1, padding=padding),
-        # nn.BatchNorm2d(num_features=out_channels),
+        nn.BatchNorm2d(num_features=out_channels),
         nn.ELU(alpha=0.7),
         # nn.Dropout2d(),
         nn.MaxPool2d(kernel_size=2)
@@ -16,7 +16,7 @@ def conv2d(in_channels, out_channels, padding, kernel_size=3):
 def dense(in_channels, out_channels):
     return nn.Sequential(
         nn.Linear(in_features=in_channels, out_features=out_channels),
-        # nn.BatchNorm1d(num_features=out_channels),
+        nn.BatchNorm1d(num_features=out_channels),
         nn.ELU(alpha=0.7),
         # nn.Dropout()
     )
@@ -61,7 +61,6 @@ class ClassifierModel(nn.Module):
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
 
         source = self.layer3(source)
-        # print(source.size())
         if target is not None:
             target = self.layer3(target)
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
@@ -79,6 +78,5 @@ class ClassifierModel(nn.Module):
         if target is not None:
             target = self.layer5(target)
             coral_loss = torch.cat((coral_loss, CORAL(source, target)))
-         
         return source, coral_loss
 
