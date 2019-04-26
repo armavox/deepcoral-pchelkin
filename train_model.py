@@ -276,7 +276,7 @@ if __name__ == '__main__':
 
     for model_name in models:
         X, y = [1, 2, 3], [1, 2, 3]
-        clf = Trainer(num_classes, model_name, deepcoral=deepcoral)
+        clf = Trainer(num_classes, model_name, deepcoral=deepcoral, device=device)
         random_search = RandomizedSearchCV(clf, param_distributions=param_dist, n_iter=n_iter_search, cv=2)
         random_search.fit(X, y)
 
