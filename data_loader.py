@@ -107,4 +107,6 @@ if __name__ == "__main__":
     print(val_loader.dataset.dataset.classes)
     print(target_loader.dataset.classes)
 
-    # print(next(iter(train_loader)))
+    print(next(iter(train_loader)))
+    print(next(iter(target_loader)))
+

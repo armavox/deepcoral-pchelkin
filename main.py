@@ -41,6 +41,7 @@ learning rate: {:.8f}""".format(epoch, settings.epochs, learning_rate) )
             gamma = np.exp(1/epoch)  / (1 + np.exp(-10 * (epoch) / settings.epochs))
             loss_coral = torch.mean(loss_coral)
             loss = loss_cls + gamma * loss_coral
+            print(train_loss)
             train_loss += loss
             loss.backward()
             optimizer.step()
@@ -92,19 +93,26 @@ def test(epoch, model, dataset_loader, loss_func, mode="Val", device='cpu'):
             pred_prob = torch.nn.Softmax(1)(output.data)[:, 1]
             pred_list = np.hstack((pred_list, pred_prob.cpu().view(-1).numpy()))
             target_list = np.hstack((target_list, target.cpu().view(-1).numpy()))
-
-    roc_auc = roc_auc_score(target_list, pred_list)
+    
+    if mode == 'Test':
+        roc_auc = roc_auc_score(target_list, pred_list)
     test_loss /= total
     accuracy = 100. * correct / total
-    print('{:5} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%),\t ROC-AUC: {:.2f}'.format(
+        
+    if mode == 'Test':
+        print('{:5} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%),\t ROC-AUC: {:.2f}'.format(
         mode, test_loss, correct, total,
         100. * correct / total, roc_auc))
+    else:
+         print('{:5} set: Average loss: {:.4f}, Accuracy: {:4d}/{:4d} ({:.2f}%)'.format(
+            mode, test_loss, correct, total,
+            100. * correct / total))
 
     if mode == "Val":
         epoch_val.append(epoch)
         loss_val.append(test_loss.item())
         acc_val.append(accuracy)
-        roc_auc_val.append(roc_auc)
+        # roc_auc_val.append(roc_auc)
     elif mode == "Test":
         epoch_test.append(epoch)
         loss_test.append(test_loss.item())
@@ -148,9 +156,11 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     
     # -> Model
-    model = ClassifierModel(n_classes=2)
-    # model = AlexNet(2)
-    # model = models.DeepCoral(num_classes=2)
+    # model = ClassifierModel(n_classes=3)
+    model = AlexNet(3)
+    # model = models.DeepCoral(num_classes=3)
+    # model.sharedNet.classifier = torch.nn.Linear(in_features=2048, out_features=3, bias=True)
+    # print(model)
     class Model(torch.nn.Module):
         def __init__(self):
             super().__init__()
