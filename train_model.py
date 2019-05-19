@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
+import math
+
 from sklearn.metrics import roc_auc_score
 from sklearn.base import BaseEstimator
 from dataset_loader import DatasetLoader
@@ -21,18 +23,22 @@ from classifier import ClassifierModel
 from original_model import AlexNet
 from models_upd import DeepCoral
 
-from sklearn.model_selection import RandomizedSearchCV
+from sklearn.model_selection import RandomizedSearchCV, ShuffleSplit
 
 
 def train_deepcoral(epoch, model, data_loader : DatasetLoader, optimizer, loss_func, device='cpu'):
-    num_iter = len(data_loader.train_data.dataset)
+    num_iter = len(data_loader.train_data)
 
     global_loss = 0.0
 
-    for train_batch, target_batch in zip(data_loader.train_data, cycle(data_loader.target_data)):
-        i, data_source, label_source = train_batch
-        _, data_target, label_target = target_batch
+    count = 0
 
+    for train_batch, target_batch in zip(data_loader.train_data, cycle(data_loader.target_data)):
+        data_source, label_source = train_batch
+        data_target, label_target = target_batch
+
+        i = count
+        count += 1
         data_source, label_source = data_source.to(device), label_source.to(device)
         data_target, label_target = data_target.to(device), label_target.to(device)
 
@@ -41,7 +47,7 @@ def train_deepcoral(epoch, model, data_loader : DatasetLoader, optimizer, loss_f
         gamma = np.exp(1.0 / epoch) / (1.0 + np.exp(-10.0 * (epoch) / settings.epochs))
         loss_coral = torch.mean(loss_coral)
         loss = loss_cls + gamma * loss_coral
-        global_loss += loss
+        global_loss += loss.item()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
@@ -49,7 +55,7 @@ def train_deepcoral(epoch, model, data_loader : DatasetLoader, optimizer, loss_f
         if i % settings.log_interval == 0 or i == num_iter - 1:
             print(
                 'Train Epoch: {} [{}/{} ({:.0f}%)] total_Loss: {:.8f} cls_Loss: {:.8f} coral_Loss: {:.8f} g{:.4f}'.format(
-                    epoch, i * len(data_source), num_iter,
+                    epoch, i, num_iter,
                            100. * i / num_iter, loss.item(), loss_cls.item(),
                            gamma * loss_coral.item(), gamma))
 
@@ -57,22 +63,27 @@ def train_deepcoral(epoch, model, data_loader : DatasetLoader, optimizer, loss_f
 
 
 def train_model(epoch, model, data_loader : DatasetLoader, optimizer, loss_func, device='cpu'):
-    num_iter = len(data_loader.train_data.dataset)
+    num_iter = len(data_loader.train_data)
 
     global_loss = 0.0
+    print(len(data_loader.train_data))
+#    count = 0
 
     for i, (data_source, label_source) in enumerate(data_loader.train_data):
         data_source, label_source = data_source.to(device), label_source.to(device)
 
+#        i = count
+#        print(i, num_iter) # count += 1
+
         label_source_pred, _ = model(data_source)
         loss = loss_func(label_source_pred, label_source)
-        global_loss += loss
+        global_loss += loss.item()
         loss.backward()
         optimizer.step()
         optimizer.zero_grad()
         if i % settings.log_interval == 0 or i == num_iter - 1:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
-                epoch, i * len(data_source), num_iter,
+                epoch, i, num_iter,
                        100. * i / num_iter, loss.data))
 
     return global_loss / float(num_iter)
@@ -91,16 +102,16 @@ def test(model, dataset_loader, loss_func, mode="Val", device='cpu'):
                 output, _ = model(data)
             else:
                 output, _ = model(data)
-            test_loss += loss_func(output, target)#, reduction='sum')
+            test_loss += loss_func(output, target).item()#, reduction='sum')
             pred = output.data.max(1)[1] # get the index of the max log-probability
             # if mode == 'Val':
             #     print(pred, target)
-            correct += pred.eq(target.data.view_as(pred)).cpu().sum()
+            correct += pred.eq(target.data.view_as(pred)).cpu().sum().item()
             total += target.size(0)
             pred_prob = nn.Softmax(1)(output.data)[:, 1]
             pred_list = np.hstack((pred_list, pred_prob.cpu().view(-1).numpy()))
             target_list = np.hstack((target_list, target.cpu().view(-1).numpy()))
-
+    pred_list = np.nan_to_num(pred_list)
     roc_auc = roc_auc_score(target_list, pred_list)
     test_loss /= total
     accuracy = 100. * correct / total
@@ -108,7 +119,7 @@ def test(model, dataset_loader, loss_func, mode="Val", device='cpu'):
         mode, test_loss, correct, total,
         100. * correct / total, roc_auc))
 
-    return test_loss.item(), accuracy, roc_auc
+    return test_loss, accuracy, roc_auc
 
 
 class Trainer(BaseEstimator):
@@ -131,6 +142,7 @@ class Trainer(BaseEstimator):
         self.lr_decay_epoch = lr_decay_epoch
         self.score_v = 0
 
+
     def __setup_model(self, num_classes):
         if self.model_name == "Alex":
             self.model = AlexNet(num_classes=num_classes)
@@ -148,6 +160,7 @@ class Trainer(BaseEstimator):
             self.model = self.model.to(device)
 
     def __create_optimizer(self, optimizer, learning_rate, l2_decay, momentum=0.9):
+        self.data_loader = DatasetLoader(self.batch_size)
         opt = optim.Adam([{'params': self.model.parameters()}], lr=learning_rate, weight_decay=l2_decay)
 
         if optimizer == 'SGD':
@@ -216,10 +229,10 @@ class Trainer(BaseEstimator):
         ax[2].set_title('ROC-AUC')
         ax[2].legend()
 
-        wo = 'w/' if settings.deepcoral else 'w/o'
+        wo = 'w/' if self.deepcoral else 'w/o'
         fig.suptitle(f'{wo} DeepCORAL', fontsize=17)
         model_name = utils.get_model_name(self.model)
-        fig_name = f'valid_results/{model_name}_deepcoral{self.deepcoral}_ep{settings.epochs}\
+        fig_name = f'./valid_results/{model_name}_deepcoral{self.deepcoral}_ep{settings.epochs}\
         _opt{self.optimizer_name}_bs{self.batch_size}_L2{self.l2_decay}_lr{self.learning_rate}_momentum{self.momentum}.png'
         fig.savefig(fig_name, dpi=90)
         plt.close(fig)
@@ -239,7 +252,7 @@ class Trainer(BaseEstimator):
 if __name__ == '__main__':
     # === ARGUMENT PARSER ===
     parser = argparse.ArgumentParser()
-    parser.add_argument('-d', '--deepcoral', action='store_true', default=False)
+    parser.add_argument('-d', '--deepcoral', action='store_true', default=True)
     parser.add_argument('-e', '--epochs', type=int)
     parser.add_argument('-с', '--count_classes', type=int, default=2)
     requiredNamed = parser.add_argument_group('required named arguments')
@@ -263,23 +276,23 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     models = [
-        "Alex", "Deep", "Class"
+      "Class", # "Alex", "Deep", "Class"
     ]
 
     param_dist = {
-        "batch_size": [2,4,8,16],
+        "batch_size": [4,8,16], #1, 2]
         "optimizer": ["Adam", "SGD", "Adagrad"],
-        "learning_rate": np.logspace(-3,-2,5),
-        "l2_decay": 5*np.logspace(-5,-2,5),
-        "momentum": [0.8, 0.9]
+        "learning_rate": np.logspace(-5,-2,10),
+        "l2_decay": 5*np.logspace(-5,-1,10),
+        "momentum": [0.8, 0.85, 0.9, 0.95]
     }
 
-    n_iter_search = 20
+    n_iter_search = 35
 
     for model_name in models:
         X, y = [1, 2, 3], [1, 2, 3]
         clf = Trainer(num_classes, model_name, deepcoral=deepcoral, device=device, scheduler=utils.exp_lr_scheduler, lr_decay_epoch=10)
-        random_search = RandomizedSearchCV(clf, param_distributions=param_dist, n_iter=n_iter_search, cv=2)
+        random_search = RandomizedSearchCV(clf, param_distributions=param_dist, n_iter=n_iter_search, cv=ShuffleSplit(n_splits=1), verbose=100)
         random_search.fit(X, y)
 
 
